@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react-swc';
 
 // ----------------------------------------------------------------------
 
-const PORT = 8080;
+const PORT = 443;
 
 export default defineConfig({
   plugins: [

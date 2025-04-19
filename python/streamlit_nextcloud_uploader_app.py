@@ -50,8 +50,8 @@ folder_path='/Users/personal/Documents'
 #webdav_url = 'https://yournextcloud.domain/remote.php/dav/files/yourusername/'
 webdav_url = 'http://localhost:8088/remote.php/dav/files/nextcloud_admin'
 webdav_local_path = 'remote.php/dav/files/nextcloud_admin'
-username = 'nextcloud_admin'
-password = 'seK#rit12'
+username = '****'
+password = '****'
 remote_path = 'resume_library'
 
 if 'wdurl' not in st.session_state:

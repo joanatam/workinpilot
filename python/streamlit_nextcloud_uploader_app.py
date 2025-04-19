@@ -50,8 +50,8 @@ folder_path='/Users/personal/Documents'
 #webdav_url = 'https://yournextcloud.domain/remote.php/dav/files/yourusername/'
 webdav_url = 'http://localhost:8088/remote.php/dav/files/nextcloud_admin'
 webdav_local_path = 'remote.php/dav/files/nextcloud_admin'
-username = '****'
-password = '****'
+username = '####'
+password = '####'
 remote_path = 'resume_library'
 
 if 'wdurl' not in st.session_state:
@@ -107,6 +107,8 @@ st.title('Work In Pilot')
 st.sidebar.title("Help")
 st.sidebar.markdown('Upload, preview or parse resume PDF file \n You can use this page to upload or parse a PDF document text or preview a resume PDF.')
 #st.sidebar.caption ="Nothing Selected"
+
+sidebar_use_inference = st.sidebar.checkbox("Infer resume sections in Previewer mode?")
 
 sidebar_selection = st.sidebar.selectbox("Recent Selections", options=st.session_state['filelist']) #options=file_list)
 
@@ -301,21 +303,7 @@ def extract_contact_info(text):
 def extract_education_details(text):
     # Use regular expressions to extract education details
     education_details = []
-    # patterns = [
-    #     r'([A-Za-z\s]+)\s*("b.a.")\s*([A-Za-z\s]+)\s*(from|at)\s*([A-Za-z\s]+)\s*(in|on)\s*(\d{4})',
-    #     r'([A-Za-z\s]+)\s*(college|university)\s*([A-Za-z\s]+)\s*(from|at)\s*([A-Za-z\s]+)\s*(in|on)\s*(\d{4})',
-    #     r'([A-Za-z\s]+)\s*(earned|received|graduated with)\s*([A-Za-z\s]+)\s*(from|at)\s*([A-Za-z\s]+)\s*(in|on)\s*(\d{4})',
-    #     r'([A-Za-z\s]+)\s*(earned|received|graduated with)\s*([A-Za-z\s]+)\s*(from|at)\s*([A-Za-z\s]+)',
-    #     r'([A-Za-z\s]+)\s*(graduated|earned|received)\s*(from|at)\s*([A-Za-z\s]+)\s*(in|on)\s*(\d{4})',
-    #     r'([A-Za-z\s]+)\s*(graduated|earned|received)\s*(from|at)\s*([A-Za-z\s]+)',
-    #     #r'([A-Za-z\s]+)\s*(college|university|bachelors)\s*(from|at)\s*([A-Za-z\s]+)',
-    #     #r'([A-Za-z\s]+)\s*(education)\s*([A-Za-z\s]+)',
-    #     r'([A-Za-z\s]+)\"M.B.A."\s*([A-Za-z\s]+)',
-    #     r'([A-Za-z\s]+)\"B.A."\s*([A-Za-z\s]+)',
-    # ]
 
-    #ba_pattern = [r'(["B"]["A"][" "])']
-    #ba_pattern = [r'(["B"]["."]*["A"]["."]*[" "|"\n"])']
     masterspattern = regex0.compile(r'Masters? ')
     mbapattern = regex0.compile(r'(M\.?B\.?A\.?)', regex0.IGNORECASE)
     mbamatches = regex0.findall(mbapattern, text) #, regex0.IGNORECASE)
@@ -661,6 +649,16 @@ def parse_pdf(file_path):
                     else:
                         paragraphs.append(paragraph.strip())
 
+    if len(high_sections) < 1 and sidebar_use_inference:
+        st.markdown(":orange[Using Inference to Detect Sections ...]")
+        common_sections = ['Summary',
+                           'Skills', 'Experience',
+                           'Education', 'Projects']
+        for asection in common_sections:
+            if asection in full_text:
+                high_sections.append(asection)
+
+
     return high_sections, paragraphs, full_text
 
 
@@ -670,7 +668,8 @@ def display_results(sections, paragraphs, txt):
 
     langid.set_languages(['en'])  # ISO 639-1 codes
 
-    st.write("**Sections Detected**")
+    st.divider()
+    st.write("**Section Detection**")
     for a in sections:
         if isinstance(a, list):
             for b in a:
@@ -702,9 +701,8 @@ def display_results(sections, paragraphs, txt):
             else:
                 st.write(" - ", eword, " [wordfreq: ", syn, " score: ", str(score), "]")
 
-    # debug
+    # eof
     sect_indices['EOF'] = [len(txt),len(txt)]
-    #sect_items = list(sect_indices.items())
     st_list = sorted(list(sect_indices.values()))
 
     j_list = sorted(list(sect_indices.items()), key=lambda x: x[1][0])
@@ -713,21 +711,23 @@ def display_results(sections, paragraphs, txt):
             break
         sect_indices[j_list[idx][0]].append(st_list[idx + 1][0])
 
-    st.divider()
     if len(sections) > 0 and len(sect_indices)>0:
+        st.divider()
         st.markdown(":page_facing_up: :blue-background[ Text Block Dump ]")
     else:
         st.markdown(":no_entry_sign: :red[No Sections Detected]")
+
     ks = list(sect_indices.keys())
     vs = list(sect_indices.values())
     for idx in range (len(sect_indices)-1):
         k = ks[idx]
         v = sect_indices[k]
-        #st.page_link()
-        st.write("Document Section: ",k)
-        section_text = txt[v[0]:v[1]]
+
+        st.write("Block[",k,"]")
+
+        section_text = txt[v[0]+len(k)+1:v[1]]
         paras = section_text.split('\n') if k == "EDUCATION" else section_text.split('. ')
-        # st.write()
+
         for para in paras:
             if (len(para.strip())>0):
                 if '\n' in para:
@@ -737,7 +737,8 @@ def display_results(sections, paragraphs, txt):
                     st.write(f" - {para}")
 
     st.write(f"*Document EOF at line [{sect_indices['EOF'][1]}]*")
-    st.write("***")
+
+    st.divider()
     st.write("**Natural Paragraphs Detected**")
     for para in paragraphs:
         st.write(f" - {para}")

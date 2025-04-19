@@ -29,8 +29,8 @@ folder_path='/Users/personal/Documents'
 # Nextcloud WebDAV URL and credentials
 #webdav_url = 'https://yournextcloud.domain/remote.php/dav/files/yourusername/'
 webdav_url = 'http://localhost:8088/remote.php/dav/files/nextcloud_admin'
-username = 'nextcloud_admin'
-password = 'seK#rit12'
+username = '****'
+password = '****'
 remote_path = 'resume_library'
 
 if 'wurl' not in st.session_state:

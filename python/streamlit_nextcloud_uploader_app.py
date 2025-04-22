@@ -12,6 +12,10 @@ import torch
 import langid
 from wordfreq import zipf_frequency
 
+# for docx templates
+from docxtpl import DocxTemplate, RichText
+
+
 import easywebdav
 import fitz  # or the chosen library
 import nltk
@@ -50,8 +54,8 @@ folder_path='/Users/personal/Documents'
 #webdav_url = 'https://yournextcloud.domain/remote.php/dav/files/yourusername/'
 webdav_url = 'http://localhost:8088/remote.php/dav/files/nextcloud_admin'
 webdav_local_path = 'remote.php/dav/files/nextcloud_admin'
-username = '####'
-password = '####'
+username = 'xxxx'
+password = 'xxxx'
 remote_path = 'resume_library'
 
 if 'wdurl' not in st.session_state:
@@ -275,7 +279,7 @@ def extract_contact_info(text):
     name_pattern = r'^([A-Za-z\s]+)'
     match = regex0.search(name_pattern, text, regex0.MULTILINE)
     if match:
-        contact_info['name'] = match.group(0).strip()
+        contact_info['name'] = match.group(0).strip().replace("\n"," ")
 
     # Extract email
     email_pattern = r'\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b'
@@ -297,6 +301,50 @@ def extract_contact_info(text):
     if match:
         contact_info['phone_numbers'] = match.group(0)
 
+    # generate new contact info sheet from our template
+    rt = RichText()
+    first_name = contact_info['name'].split(" ")[0]
+    rt.add(first_name, size=60)
+    rt_embedded = RichText("our friend ", size=32, color="#6B83A4", bold=True)
+    rt_embedded.add(rt)
+
+    doc = DocxTemplate("./templates/contactinfo_test_tpl.docx")
+    context = {'example': rt_embedded,
+               'contact_info': contact_info }
+    doc.render(context)
+    doc.save("./output/contactinfo_test.docx")
+
+    foo = open("./output/contactinfo_test.docx","rb")
+    bytbuff = foo.read()
+    foo.flush()
+    foo.close()
+
+    # can this go to webdav?
+    rpath = st.session_state['wdpath']
+    parsed_url = urlparse(st.session_state["wdurl"])
+    server_address = parsed_url.geturl()
+    client = easywebdav.connect(server_address,
+                                username=st.session_state["wduser"],
+                                password=st.session_state["wdpass"],
+                                protocol=parsed_url.scheme)
+    client.baseurl = st.session_state["wdurl"]
+    webdavurl = st.session_state['wdurl']
+    reconstructed_url = webdavurl + os.sep + rpath + os.sep + "generated_from_template" + os.sep + "contactinfo_test.docx"
+    # # Authentication and headers
+    uname = st.session_state['wduser']
+    passw = st.session_state['wdpass']
+    auth = (uname, passw)
+    headers = {'Content-Type': 'application/octet-stream'}
+    try:
+        st.write("writing to ",reconstructed_url)
+        resp = client.session.put(reconstructed_url,
+                                  data=bytbuff,allow_redirects=False, auth=auth, headers=headers )
+        st.write(resp.text)
+    except easywebdav.WebdavException as e: #.client.ConnectionError as e:
+        st.write(f"Connection error: {e}")
+    except requests.RequestException as e: #easywebdav..client.HTTPError as e:
+        st.write(f"HTTP request error: {e}")
+
     return contact_info
 
 
@@ -312,27 +360,13 @@ def extract_education_details(text):
     bamatches = regex0.findall(bapattern, text) #, regex0.IGNORECASE)
     mba_match = ""
     ba_match = ""
-    masters_match = ""
+
     if len(mbamatches) > 0:
         mba_match = mbamatches[len(mbamatches)-1]
     if len(bamatches) > 0:
         ba_match = bamatches[len(bamatches)-1]
     if len(mastersmatches) > 0:
         masters_match = mastersmatches[len(mastersmatches)-1]
-
-    # for pattern in patterns:
-        # matches = regex0.findall(pattern, text, regex0.IGNORECASE)
-        # import pdb
-        # pdb.set_trace()
-        # for match in matches:
-        #     education_details.append({
-        #         'all': match[0],
-        #         'one': match[1] if len(match) > 1 else None,
-        #         'degree': match[2] if len(match) > 2 else None,
-        #         'university': match[3] if len(match) > 3 else None,
-        #         'year': match[6] if len(match) > 6 else None,
-        #     })
-        #
 
     findme = 'university'
     if findme in text.lower():
@@ -475,13 +509,6 @@ def extract_work_experience(text):
                     'description': (description_match.group(0)).strip()
                 })
 
-            #if job_title_match and company_match and dates_match and description_match:
-            #    work_experience.append({
-            #        'job_title': job_title_match.group(0).strip(),
-            #        'company': company_match.group(0).strip(),
-            #        'dates': dates_match.group(0),
-            #        'description': description_match.group(0)
-            #    })
     return work_experience
 
 
@@ -578,7 +605,6 @@ def extract_text_from_webdav_pdf(fqp):
                 # append each chunk of bytes
                 byte_data += chunk
     except Exception as e:
-        print(f"An error occurred: {e}")
         st.write(f"An error occurred: {e}")
 
     txt = ""
@@ -723,10 +749,16 @@ def display_results(sections, paragraphs, txt):
         k = ks[idx]
         v = sect_indices[k]
 
-        st.write("Block[",k,"]")
+        st.write("Section[",k,"]")
 
         section_text = txt[v[0]+len(k)+1:v[1]]
-        paras = section_text.split('\n') if k == "EDUCATION" else section_text.split('. ')
+        paras = []
+        if k == "EDUCATION":
+            paras = section_text.split('\n')
+        else:
+            ps = section_text.split('. ')
+            for para in ps:
+                paras = para.split('\n')
 
         for para in paras:
             if (len(para.strip())>0):
@@ -751,6 +783,7 @@ def find_local_file(filename):
         if os.path.exists("/Users/personal/Downloads/"+filename):
             return os.path.realpath("/Users/personal/Downloads/"+filename)
     return filename
+
 
 if display_container == "Embed":
     if display_format == "Upload" and uploaded:
@@ -786,11 +819,8 @@ if display_container == "Embed":
             ###
             st.write('NER - Named Entity Recognition in this document')
             # first do $ python3 -m spacy download en_core_web_trf
-            #N/A  - trf = spacy.load('en_core_web_trf')
             ner = spacy.load('en_core_web_sm')
             doc = ner(txt)
-            # import pdb
-            # pdb.set_trace()
             for ent in doc.ents:
                 st.write(ent.text, ent.start_char, ent.end_char, ent.label_)
             ###
